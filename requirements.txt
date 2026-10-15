@@ -1,0 +1,14 @@
+# Проверено на Python 3.12.8 (Windows 11). Версии - те, на которых запускались тесты и пайплайн.
+numpy==2.5.4
+pandas==3.0.6
+scipy==1.18.1
+scikit-learn==1.9.1
+pyarrow==25.0.1
+plotly==7.1.0
+streamlit==1.65.0
+matplotlib==3.11.2
+pytest==9.1.1
+# для выполнения notebooks/eda.ipynb
+nbformat==5.11.1
+nbconvert==7.17.2
+ipykernel==7.4.0

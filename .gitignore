@@ -1,0 +1,17 @@
+# исходные данные (большие CSV) не храним в Git; описание и шаблон разметки - храним
+data/*
+!data/README.md
+!data/labels/
+data/labels/*
+!data/labels/labels.csv
+
+.venv
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# результаты расчёта и кэш (воспроизводятся командой python -m src.pipeline)
+artifacts/
+logs/
+config/user_config.json
