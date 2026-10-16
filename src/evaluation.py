@@ -242,5 +242,5 @@ def synthetic_benchmark(src, cfg: dict) -> dict:
     return dict(source_id=src.source_id, noise=noise, n_injected=len(truth), per_detector=rows,
                 truth=truth.assign(start_time=truth["start_time"].astype(str),
                                    end_time=truth["end_time"].astype(str)).to_dict("records"),
-                note="СИНТЕТИЧЕСКИЙ ТЕСТ: искусственные отклонения в копии данных; "
+                note="Синтетический тест: искусственные отклонения в копии данных; "
                      "не является оценкой качества на реальных аномалиях")

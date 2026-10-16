@@ -31,7 +31,6 @@ CSS = """
 <style>
 .block-container {padding-top: 1.6rem; padding-bottom: 2rem; max-width: 1500px;}
 h1 {font-size: 1.85rem !important; font-weight: 650 !important; margin-bottom: 0 !important;}
-.fa-sub {color: #52514e; margin-top: -0.2rem; margin-bottom: 1rem; font-size: 0.95rem;}
 .fa-card {background: #ffffff; border: 1px solid rgba(11,11,11,0.08); border-radius: 12px;
           padding: 14px 16px; margin-bottom: 12px;}
 .fa-card h4 {margin: 0 0 8px 0; font-size: 1.02rem; font-weight: 640;}
@@ -61,9 +60,8 @@ def inject_css() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
 
 
-def header(title: str, subtitle: str) -> None:
+def header(title: str) -> None:
     st.title(title)
-    st.markdown(f"<div class='fa-sub'>{subtitle}</div>", unsafe_allow_html=True)
 
 
 def card_open(title: str, extra: str = "") -> str:
@@ -155,7 +153,7 @@ def source_info() -> pd.DataFrame:
 def require_results() -> bool:
     if not store().exists():
         st.warning("Результаты пайплайна не найдены. Запустите расчёт: `python -m src.pipeline` "
-                   "или на странице «О проекте» → «Пересчитать».")
+                   "или на странице «Данные и ограничения» → «Параметры и пересчёт».")
         return False
     return True
 

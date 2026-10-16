@@ -49,7 +49,7 @@ def test_reads_both_schemas(tmp_path, cfg):
     assert sa.report["has_points_size"] and not sb.report["has_points_size"]
     assert sa.values.shape == sb.values.shape == (20, 400)
     assert sa.tz_known and sa.tz_offset_h == 3.0
-    assert not sb.tz_known  # без пояса: отмечено, а не придумано
+    assert not sb.tz_known  # пояс не указан
 
 
 def test_points_size_mismatch_and_corrupt_rows_are_reported(tmp_path, cfg):

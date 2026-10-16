@@ -21,7 +21,7 @@ DETECTOR_LABELS = {
     "statistical": "Статистический (median/MAD)",
     "isolation_forest": "Isolation Forest",
     "regression": "Регрессия + остатки",
-    "autoencoder": "Автоэнкодер (P2)",
+    "autoencoder": "Автоэнкодер",
 }
 DETECTOR_CODES = {"statistical": "A", "isolation_forest": "B", "regression": "C", "autoencoder": "D"}
 
