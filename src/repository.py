@@ -1,15 +1,5 @@
-"""Слой доступа к результатам пайплайна (единый источник правды для интерфейса).
+"""Доступ к результатам пайплайна в artifacts/results.
 
-artifacts/
-  processed/              кэш разобранных CSV (ключ - отпечаток файла + настройки загрузки)
-  results/                результаты последнего УСПЕШНОГО запуска
-    run_manifest.json     статус, время, конфигурация, хэш, отпечатки данных, версии
-    data_report.json      профиль качества по источникам
-    events.parquet        каталог событий всех детекторов (контракт - events.EVENT_COLUMNS)
-    metrics.json          сравнение детекторов, регрессия, разметка, синтетический тест
-    patterns/*.csv        группы повторений, совпадения между приборами, автокорреляция
-    prepared/<src>.npz    бинированный сигнал, отклонения, разбиение
-    scores/<src>__<det>.npz  оценки окон
 Запуск пишет в results_staging/ и заменяет results/ только после успеха.
 """
 from __future__ import annotations
@@ -70,7 +60,6 @@ class ResultStore:
         self.root = Path(root) if root else ARTIFACTS_DIR
         self.dir = self.root / results_name
 
-    # ---- запись
     def save_prepared(self, prep: Prepared) -> None:
         p = self.dir / "prepared" / f"{_safe(prep.source_id)}.npz"
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -96,7 +85,6 @@ class ResultStore:
     def save_json(self, name: str, obj) -> None:
         write_json(self.dir / name, obj)
 
-    # ---- чтение
     def exists(self) -> bool:
         return (self.dir / "run_manifest.json").exists()
 
@@ -137,7 +125,7 @@ class ResultStore:
 
 
 def promote_staging(root: Path, staging: str = "results_staging", final: str = "results") -> None:
-    """Атомарная (насколько позволяет ФС) замена результатов после успешного запуска."""
+    """Замена results/ после успешного запуска."""
     root = Path(root)
     src, dst, old = root / staging, root / final, root / f"{final}_old"
     if old.exists():

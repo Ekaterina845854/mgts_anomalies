@@ -1,19 +1,8 @@
-"""Признаки окон «кадр × пространственный бин».
+"""Признаки окон «кадр × бин» в единицах шума, только по текущему и прошлым кадрам.
 
-Все признаки строятся только из текущего и прошлых кадров (кроме пространственных
-соседей в том же кадре) и выражены в единицах шума бина, поэтому сопоставимы
-между источниками с разной частотой опроса и уровнем шума.
-
-| признак          | смысл                                                        |
-|------------------|--------------------------------------------------------------|
-| z                | отклонение от локальной нормы, в шумах (со знаком)           |
-| abs_z            | модуль z                                                     |
-| rate_z           | изменение за один кадр без общего сдвига кадра, в шумах      |
-| contrast_z       | z бина минус медиана z соседних ±3 бинов (локальность)       |
-| intra_std_ratio  | разброс точек внутри бина / его типичное значение (train)    |
-| temporal_std_z   | std z за последние 5 кадров (нестабильность)                 |
-| persistence      | сколько из последних 5 кадров имели |z| > 3 (длительность)    |
-| width_bins       | длина непрерывного участка соседних бинов с |z| > 3 (ширина) |
+z, abs_z — отклонение от нормы; rate_z — изменение за кадр без общего сдвига;
+contrast_z — z минус медиана соседей ±3; intra_std_ratio — разброс внутри бина;
+temporal_std_z, persistence — std z и число |z|>3 за 5 кадров; width_bins — ширина участка |z|>3.
 """
 from __future__ import annotations
 
@@ -44,7 +33,7 @@ def _rolling_past(a: np.ndarray, segment: np.ndarray, k: int, fn) -> np.ndarray:
 
 
 def run_width(active: np.ndarray) -> np.ndarray:
-    """Для каждой активной ячейки - длина непрерывного активного участка по оси бинов."""
+    """Длина непрерывного активного участка по оси бинов."""
     T, B = active.shape
     out = np.zeros((T, B), dtype=np.float32)
     for t in np.nonzero(active.any(axis=1))[0]:
@@ -59,10 +48,10 @@ def run_width(active: np.ndarray) -> np.ndarray:
 def compute_features(prep: Prepared) -> dict[str, np.ndarray]:
     z = prep.z
     valid = np.isfinite(z)
-    # изменение за кадр: разность значений бина минус медианная разность кадра
+    # изменение за кадр минус медианное изменение кадра
     dv = np.full_like(prep.vb, np.nan)
     dv[1:] = prep.vb[1:] - prep.vb[:-1]
-    dv[np.isnan(prep.dt_s)] = np.nan  # не через разрыв/начало сегмента
+    dv[np.isnan(prep.dt_s)] = np.nan  # не через разрыв
     with _quiet():
         dv = dv - np.nanmedian(dv, axis=1, keepdims=True)
     rate_z = dv / prep.sigma[None, :]
@@ -82,7 +71,7 @@ def compute_features(prep: Prepared) -> dict[str, np.ndarray]:
         "persistence": persistence,
         "width_bins": run_width(active),
     }
-    # окно считается вычислимым только при наличии нормы (z конечен)
+    # окно вычислимо только при наличии нормы
     for k in feats:
         feats[k] = np.where(valid, feats[k], np.nan).astype(np.float32)
     return feats
@@ -90,7 +79,7 @@ def compute_features(prep: Prepared) -> dict[str, np.ndarray]:
 
 def feature_matrix(feats: dict[str, np.ndarray], mask: np.ndarray | None = None
                    ) -> tuple[np.ndarray, np.ndarray]:
-    """Плоская матрица (N, F) по окнам, где все признаки конечны; возвращает (X, flat_index)."""
+    """Матрица (N, F) по окнам с конечными признаками и их flat_index."""
     stack = np.stack([feats[n] for n in FEATURE_NAMES], axis=-1)  # (T, B, F)
     T, B, F = stack.shape
     flat = stack.reshape(-1, F)

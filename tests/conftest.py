@@ -1,4 +1,4 @@
-"""Общие фикстуры. ВСЕ данные здесь синтетические (тестовые) и не смешиваются с реальными."""
+"""Синтетические фикстуры; с реальными данными не смешиваются."""
 from __future__ import annotations
 
 import copy
@@ -26,11 +26,7 @@ def cfg():
 def make_synthetic_csv(path: Path, n_frames=240, n_points=400, dx=0.25, dt_s=60, with_size=True,
                        tz="+03", anomaly=True, seed=0, dts="synthetic-test-device", channel=1,
                        amp=6.0) -> dict:
-    """СИНТЕТИЧЕСКИЙ тестовый CSV в формате реальных файлов (JSON points).
-
-    Нормальный сигнал: статический профиль + общий медленный дрейф + шум 0.2.
-    Аномалия: прямоугольное отклонение amp в кадрах 200..205 на x≈50 м (если anomaly=True).
-    """
+    """Синтетический CSV в формате реальных файлов; аномалия amp в кадрах 200..205 на x≈50."""
     rng = np.random.default_rng(seed)
     x = np.arange(n_points) * dx
     static = 20 + 3 * np.sin(x / 7.0)

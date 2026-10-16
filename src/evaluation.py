@@ -1,14 +1,7 @@
-"""Оценка качества и сравнение детекторов.
+"""Оценка и сравнение детекторов.
 
-1. Диагностика без разметки (вычисляется всегда, на одном тестовом периоде -
-   test-части каждого источника): число окон-срабатываний, событий, событий в час,
-   время и память, совпадения событий между методами и уникальные находки.
-2. Event-level Precision / Recall / F1 - ТОЛЬКО при наличии экспертной разметки
-   (data/labels/labels.csv). Без разметки возвращается None, интерфейс пишет
-   «нет разметки», а не ноль.
-3. Синтетический тест: в копию реального источника (test-часть) вносятся
-   искусственные отклонения известного положения. Это проверка технической
-   работоспособности, НЕ доказательство качества на реальных аномалиях.
+Без разметки — диагностика на test; P/R/F1 — только по data/labels/labels.csv.
+Синтетический тест проверяет работоспособность, а не качество на реальных аномалиях.
 """
 from __future__ import annotations
 
@@ -24,15 +17,13 @@ LABEL_COLUMNS = ["label_id", "source_id", "start_time", "end_time", "x_start", "
 LABEL_VALUES = ("аномалия", "норма", "неопределённо")
 
 
-# --------------------------------------------------------------------------- matching
-
 def _overlap(a0, a1, b0, b1, tol):
     return (a0 <= b1 + tol) & (b0 <= a1 + tol)
 
 
 def match_events(a: pd.DataFrame, b: pd.DataFrame, time_tol_s: float, x_tol: float
                  ) -> np.ndarray:
-    """Булева матрица совпадений (len(a), len(b)): один источник, пересечение по времени и x."""
+    """Матрица совпадений (len(a), len(b)) по времени и x в одном источнике."""
     if len(a) == 0 or len(b) == 0:
         return np.zeros((len(a), len(b)), dtype=bool)
     ta0 = epoch_s(a["start_time"])[:, None]
@@ -47,7 +38,7 @@ def match_events(a: pd.DataFrame, b: pd.DataFrame, time_tol_s: float, x_tol: flo
 
 
 def _match_by_source(a: pd.DataFrame, b: pd.DataFrame, cfg: dict) -> tuple[np.ndarray, np.ndarray]:
-    """Для каждого события a/b - есть ли совпадение в другой таблице (по источникам, без N×M по всем)."""
+    """Есть ли у каждого события a/b совпадение в другой таблице."""
     ec = cfg["evaluation"]
     ma = np.zeros(len(a), dtype=bool)
     mb = np.zeros(len(b), dtype=bool)
@@ -63,15 +54,9 @@ def _match_by_source(a: pd.DataFrame, b: pd.DataFrame, cfg: dict) -> tuple[np.nd
     return ma, mb
 
 
-# --------------------------------------------------------------------------- comparison
-
 def compare_detectors(events: pd.DataFrame, results_meta: pd.DataFrame, test_hours: dict,
                       cfg: dict, split: str = "test", sources: list | None = None) -> dict:
-    """Сравнение на одном периоде (по умолчанию test-части всех источников).
-
-    results_meta: строки (source_id, detector, flagged_windows_test, windows_test,
-    fit_time_s, score_time_s, peak_mem_mb, threshold, validation_alarm_rate).
-    """
+    """Сравнение детекторов на test-части всех источников."""
     ev = events if split is None else events[events["split"] == split]
     rm = results_meta
     if sources is not None:
@@ -126,10 +111,8 @@ def window_agreement(flags_by_det: dict[str, np.ndarray]) -> list[dict]:
     return out
 
 
-# --------------------------------------------------------------------------- labels
-
 def label_template_path(path: Path) -> Path:
-    """Создаёт пустой шаблон разметки (только заголовок), если файла нет."""
+    """Пустой шаблон разметки, если файла нет."""
     path = Path(path)
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,13 +147,9 @@ def append_label(path: Path, row: dict) -> None:
 
 
 def labeled_metrics(events: pd.DataFrame, labels: pd.DataFrame, cfg: dict) -> dict:
-    """Event-level P/R/F1 в пределах размеченных участков.
+    """Event-level P/R/F1: TP — пересечение с «аномалия», FP — только с «норма».
 
-    * TP - предсказанное событие пересекается с участком «аномалия»;
-    * FP - пересекается только с участками «норма»;
-    * события вне размеченных участков и участки «неопределённо» не учитываются;
-    * Recall - доля участков «аномалия», найденных хотя бы одним событием.
-    Если участков «аномалия» нет - метрики не вычисляются (None).
+    Без участков «аномалия» возвращает None.
     """
     ec = cfg["evaluation"]
     lab = labels[labels["label"].isin(["аномалия", "норма"])].copy()
@@ -201,14 +180,9 @@ def labeled_metrics(events: pd.DataFrame, labels: pd.DataFrame, cfg: dict) -> di
     return dict(status, available=True, per_detector=per, reason=None)
 
 
-# --------------------------------------------------------------------------- synthetic
-
 def inject_synthetic(values: np.ndarray, x: np.ndarray, t_sec: np.ndarray, split: np.ndarray,
                      noise: float, cfg: dict) -> tuple[np.ndarray, pd.DataFrame]:
-    """Добавляет гауссовы по x и прямоугольные по времени отклонения в test-часть.
-
-    Возвращает изменённую копию значений и таблицу внесённых событий (истина).
-    """
+    """Гауссовы по x и прямоугольные по времени отклонения в test-части; возвращает (значения, истина)."""
     sc = cfg["evaluation"]["synthetic"]
     rng = np.random.default_rng(sc["random_state"])
     out = values.copy()
@@ -224,7 +198,7 @@ def inject_synthetic(values: np.ndarray, x: np.ndarray, t_sec: np.ndarray, split
             if not used[max(0, t0 - 10):t0 + dur + 10].any():
                 break
         used[t0:t0 + dur] = True
-        width = float(rng.uniform(1.0, 6.0))  # ширина в единицах x
+        width = float(rng.uniform(1.0, 6.0))  # в единицах x
         xc = float(rng.uniform(x[0] + 10 * width, x[-1] - 10 * width))
         amp = float(rng.uniform(lo, hi) * noise * rng.choice([-1, 1]))
         shape = np.exp(-0.5 * ((x - xc) / (width / 2.355)) ** 2)
@@ -236,9 +210,9 @@ def inject_synthetic(values: np.ndarray, x: np.ndarray, t_sec: np.ndarray, split
 
 
 def synthetic_benchmark(src, cfg: dict) -> dict:
-    """Запускает весь путь (prepare→features→детекторы→события) на источнике с инъекциями."""
+    """Полный путь детекции на источнике с инъекциями."""
     from .data_loader import SourceData
-    from .pipeline import run_source  # локальный импорт: избегаем цикла
+    from .pipeline import run_source  # избегаем циклического импорта
 
     base = run_source(src, cfg)
     prep0 = base["prep"]

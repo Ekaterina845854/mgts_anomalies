@@ -1,8 +1,4 @@
-"""Общие элементы интерфейса: стили, цвета, загрузка результатов, форматирование, фильтры.
-
-Интерфейс НЕ содержит логики обнаружения аномалий: всё читается из artifacts/results
-(единый источник правды, см. src/repository.py).
-"""
+"""Общие элементы интерфейса: стили, цвета, загрузка результатов, форматирование, фильтры."""
 from __future__ import annotations
 
 import json
@@ -14,9 +10,7 @@ import streamlit as st
 
 from src.repository import ResultStore
 
-# Категориальная палитра (проверена валидатором: CVD/normal-vision, все пары).
-# Слоты 1-3 проходят проверку для всех пар; 4-й (фиолетовый) - для соседних, поэтому на
-# графиках, где сравниваются все пары, методы дополнительно различаются формой маркера.
+# палитра методов; 4-й цвет дополнительно различается формой маркера
 DET_COLORS = {"statistical": "#2a78d6", "isolation_forest": "#eb6834", "regression": "#1baf7a",
               "autoencoder": "#6250d6"}
 DET_SYMBOLS = {"statistical": "circle", "isolation_forest": "square", "regression": "diamond",
@@ -85,8 +79,6 @@ def stat_tile(label: str, value: str, hint: str = "") -> str:
     h = f"<div class='hint'>{hint}</div>" if hint else ""
     return f"<div class='fa-stat'><div class='lbl'>{label}</div><div class='val'>{value}</div>{h}</div>"
 
-
-# ----------------------------------------------------------------------- data
 
 def store() -> ResultStore:
     return ResultStore()
@@ -168,8 +160,6 @@ def require_results() -> bool:
     return True
 
 
-# ----------------------------------------------------------------------- formatting
-
 def tz_label(info: dict | pd.Series) -> str:
     if not info.get("tz_known", True):
         return "пояс не указан"
@@ -217,8 +207,6 @@ def x_unit_short(x_unit: str) -> str:
 def source_label(row) -> str:
     return f"Файл {row['file']} · прибор {row['dts_id'][:8]} / канал {row['channel_id']}"
 
-
-# ----------------------------------------------------------------------- filters
 
 def source_selector(key: str = "src", label: str = "Источник (файл · прибор / канал)") -> dict:
     si = source_info()

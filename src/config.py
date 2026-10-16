@@ -1,10 +1,4 @@
-"""Конфигурация пайплайна.
-
-Все параметры собраны в одном словаре, который сохраняется рядом с результатами
-(artifacts/run_manifest.json). Значения по умолчанию подобраны по результатам EDA
-(см. docs/DATA_REPORT.md): шаг по времени 10–240 с, шаг по координате ~0.1–0.25 м
-(для файла 5 — 1.0 в неподтверждённых единицах), шум между кадрами ~0.35–1.3.
-"""
+"""Конфигурация пайплайна; значения по умолчанию подобраны по EDA (docs/DATA_REPORT.md)."""
 from __future__ import annotations
 
 import copy
@@ -21,34 +15,28 @@ USER_CONFIG_PATH = PROJECT_ROOT / "config" / "user_config.json"
 DEFAULT_CONFIG: dict = {
     "data": {
         "files": ["1.csv", "2.csv", "3.csv", "4.csv", "5.csv", "6.csv"],
-        # Значения, которые встречаются как заполнитель за пределами волокна.
-        # Обнаружено в 5.csv: -300 ровно в столбцах 1689..2363 во всех кадрах.
+        # заполнитель за концом волокна (5.csv)
         "sentinel_values": [-300.0],
-        # Диапазон физически правдоподобных значений; всё вне диапазона -> NaN
-        # с сохранением причины. Широкий намеренно: отбраковываем только мусор.
+        # вне диапазона -> NaN с указанием причины
         "valid_value_range": [-60.0, 200.0],
     },
     "preprocess": {
-        # Разрыв во времени больше gap_factor * медианный шаг начинает новый сегмент
-        # (скользящая норма и лаги не переносятся через разрыв).
+        # разрыв > max(gap_factor·медианный шаг, gap_min_s) начинает новый сегмент
         "gap_factor": 5.0,
         "gap_min_s": 900.0,
-        # Целевой размер пространственного бина в единицах x. Для файла 5
-        # (x с шагом 1.0, единицы не подтверждены) используется bin_points_fallback.
+        # для x с шагом 1.0 (5.csv) используется bin_points_fallback
         "bin_target_x": 1.0,
         "bin_points_fallback": 4,
-        # Скользящая (только прошлые кадры) медиана - "локальная норма".
+        # локальная норма — медиана по прошлым кадрам
         "baseline_window_min": 60.0,
         "baseline_min_frames": 5,
-        # Доли разбиения по времени внутри каждого источника.
         "split": {"train": 0.6, "validation": 0.2, "test": 0.2},
-        # Нижняя граница шума (доля медианного шума источника) - защита от MAD=0.
+        # нижняя граница шума, защита от MAD=0
         "noise_floor_frac": 0.25,
         "noise_floor_abs": 1e-3,
     },
     "detectors": {
-        # threshold_mode: "fixed" - порог min_threshold в шкале метода (σ шума для A и C);
-        # "quantile" - квантиль (1 - target_rate) оценок на validation, не ниже min_threshold.
+        # fixed — порог min_threshold в σ; quantile — квантиль validation, не ниже min_threshold
         "target_rate": 0.002,
         "statistical": {"threshold_mode": "fixed", "min_threshold": 6.0},
         "isolation_forest": {
@@ -56,8 +44,7 @@ DEFAULT_CONFIG: dict = {
             "max_samples": 512,
             "train_sample": 60000,
             "threshold_mode": "quantile",
-            # 0.6: у исходного IF оценка > 0.5 уже "подозрительна"; нижняя граница
-            # не даёт порогу опуститься в шум на спокойных источниках.
+            # нижняя граница не даёт порогу уйти в шум
             "min_threshold": 0.6,
             "random_state": 42,
         },
@@ -69,7 +56,6 @@ DEFAULT_CONFIG: dict = {
             "min_threshold": 6.0,
             "random_state": 42,
         },
-        # P2: дополнительный эксперимент; включается/выключается флагом enabled.
         "autoencoder": {
             "enabled": True,
             "hidden": [24, 6, 24],
@@ -83,15 +69,13 @@ DEFAULT_CONFIG: dict = {
         },
     },
     "events": {
-        # Срабатывания одного прибора/канала объединяются, если между ними не
-        # больше max_gap_s по времени и max_gap_bins бинов по координате.
+        # допуски объединения срабатываний в событие
         "max_gap_s": 300.0,
         "max_gap_bins": 2,
-        # Событие должно содержать хотя бы min_cells окон; одиночное окно
-        # допускается только при оценке >= single_cell_score_mult * порог.
+        # одиночное окно — только при score >= single_cell_score_mult·порог
         "min_cells": 2,
         "single_cell_score_mult": 1.5,
-        # Описательные категории (не физические причины).
+        # описательные категории, не причины
         "short_max_s": 600.0,
         "local_max_x": 5.0,
         "abrupt_rise_frac": 0.6,
@@ -131,7 +115,7 @@ def deep_update(base: dict, upd: dict) -> dict:
 
 
 def load_config(path: Path | None = None) -> dict:
-    """Конфигурация по умолчанию + пользовательские переопределения (если есть)."""
+    """Конфигурация по умолчанию + config/user_config.json."""
     path = Path(path) if path else USER_CONFIG_PATH
     cfg = copy.deepcopy(DEFAULT_CONFIG)
     if path.exists():

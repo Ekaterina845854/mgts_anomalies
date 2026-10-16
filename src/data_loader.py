@@ -1,14 +1,6 @@
-"""Загрузка и валидация исходных CSV.
+"""Загрузка и валидация CSV (dts_id, channel_id, timestamp, points[, points_size]).
 
-Обнаруженный на реальных файлах формат (см. docs/DATA_REPORT.md):
-  * столбцы dts_id, channel_id, timestamp, points и (только в 1.csv, 6.csv) points_size;
-  * points - JSON-массив пар [x, value]; x начинается с 0 и растёт с постоянным шагом;
-  * timestamp - "YYYY-MM-DD HH:MM:SS+HH" либо без часового пояса (5.csv);
-  * 5.csv содержит заполнитель -300 за пределами волокна.
-
-Разбор points выполняется только через json.loads (без eval/literal_eval: других
-форматов в данных не обнаружено). Каждая отбракованная строка или точка
-сохраняется с причиной в отчёте качества, ничего не удаляется молча.
+points разбирается только через json.loads; отбракованные строки и точки сохраняются с причиной.
 """
 from __future__ import annotations
 
@@ -37,15 +29,15 @@ class DataFormatError(ValueError):
 
 @dataclass
 class SourceData:
-    """Один источник сопоставимых сигналов: один прибор + один канал + один файл."""
+    """Один прибор + канал + файл."""
 
     source_id: str
     file_name: str
     dts_id: str
     channel_id: int
-    times: pd.DatetimeIndex  # UTC (для источников без пояса - "как есть", см. tz_known)
-    x: np.ndarray  # координата вдоль волокна, общая сетка
-    values: np.ndarray  # (кадры, точки) float32, NaN = нет данных
+    times: pd.DatetimeIndex  # UTC; без пояса — как есть (tz_known)
+    x: np.ndarray  # координата вдоль волокна
+    values: np.ndarray  # (кадры, точки), NaN = нет данных
     tz_known: bool
     tz_offset_h: float | None
     x_unit: str
@@ -71,8 +63,6 @@ class SourceData:
         return float(np.median(np.diff(to_epoch_ns(self.times))) / 1e9)
 
 
-# --------------------------------------------------------------------------- parsing
-
 def parse_timestamp(raw: str) -> tuple[pd.Timestamp | None, float | None, str | None]:
     """Возвращает (время в UTC, смещение пояса в часах или None, ошибка)."""
     m = _TS_RE.match(str(raw))
@@ -96,17 +86,17 @@ def parse_timestamp(raw: str) -> tuple[pd.Timestamp | None, float | None, str | 
 
 
 def to_epoch_ns(times) -> np.ndarray:
-    """Наносекунды от эпохи независимо от внутреннего разрешения pandas (в pandas 3 бывает 'us')."""
+    """Наносекунды от эпохи при любом разрешении pandas."""
     return np.asarray(pd.DatetimeIndex(times).as_unit("ns").asi8, dtype=np.int64)
 
 
 def epoch_s(s) -> np.ndarray:
-    """Секунды от эпохи для Series/Index дат (корректно при любом разрешении: s, ms, us, ns)."""
+    """Секунды от эпохи при любом разрешении pandas."""
     return to_epoch_ns(pd.DatetimeIndex(s)) / 1e9
 
 
 def _parse_points_fast(s: str) -> np.ndarray | None:
-    """Быстрый разбор строго вида [[x, v], [x, v], ...]; None, если структура иная."""
+    """Быстрый разбор [[x, v], ...]; None при иной структуре."""
     if not (s.startswith("[[") and s.endswith("]]")):
         return None
     body = s[2:-2].replace(" ", "")
@@ -154,8 +144,6 @@ def file_fingerprint(path: Path) -> str:
     return h.hexdigest()[:16]
 
 
-# --------------------------------------------------------------------------- loading
-
 def read_raw_csv(path: Path) -> pd.DataFrame:
     """Чтение CSV как строк и проверка схемы."""
     df = pd.read_csv(path, dtype=str, keep_default_na=False)
@@ -170,7 +158,7 @@ def read_raw_csv(path: Path) -> pd.DataFrame:
 
 
 def load_file(path: Path, cfg: dict) -> list[SourceData]:
-    """Загружает файл и возвращает по одному SourceData на пару (прибор, канал)."""
+    """Один SourceData на пару (прибор, канал)."""
     path = Path(path)
     df = read_raw_csv(path)
     dcfg = cfg["data"]
@@ -229,7 +217,7 @@ def load_file(path: Path, cfg: dict) -> list[SourceData]:
             x, v = x[order], v[order]
         dup = np.r_[False, np.diff(x) == 0]
         if dup.any():
-            # повторяющаяся координата: оставляем первое значение, считаем остальные
+            # повтор x: оставляем первое значение
             point_stats["duplicate_x"] += int(dup.sum())
             x, v = x[~dup], v[~dup]
         v = v.copy()
@@ -260,8 +248,8 @@ def load_file(path: Path, cfg: dict) -> list[SourceData]:
 
 def _assemble_source(sid, fname, dts, ch, sub, issues_df, point_stats, n_raw, has_size) -> SourceData:
     issues = [issues_df] if len(issues_df) else []
-    # --- порядок и дубликаты времени
-    raw_order_ts = [r["ts"] for r in sub]  # sub уже в порядке строк файла
+    # порядок и дубликаты времени
+    raw_order_ts = [r["ts"] for r in sub]
     monotonic = all(a <= b for a, b in zip(raw_order_ts[:-1], raw_order_ts[1:]))
     sub = sorted(sub, key=lambda r: (r["ts"], r["row"]))
     dedup, dups = [], []
@@ -274,12 +262,12 @@ def _assemble_source(sid, fname, dts, ch, sub, issues_df, point_stats, n_raw, ha
         issues.append(pd.DataFrame(dups))
     sub = dedup
 
-    # --- часовой пояс
+    # часовой пояс
     offsets = {r["offset"] for r in sub}
     tz_known = None not in offsets
     tz_offset = next(iter(offsets)) if len(offsets) == 1 else None
 
-    # --- общая сетка x: самый длинный профиль; остальные должны быть его префиксами
+    # общая сетка x — самый длинный профиль
     ref = max(sub, key=lambda r: len(r["x"]))["x"]
     n = len(ref)
     vals = np.full((len(sub), n), np.nan, dtype=np.float32)
@@ -292,14 +280,14 @@ def _assemble_source(sid, fname, dts, ch, sub, issues_df, point_stats, n_raw, ha
             vals[k, :m] = r["v"]
             truncated += m < n
         else:
-            # сетка отличается - линейная интерполяция внутри исходного диапазона
+            # иная сетка — линейная интерполяция
             ok = np.isfinite(r["v"])
             inside = (ref >= r["x"][0]) & (ref <= r["x"][-1])
             if ok.sum() >= 2:
                 vals[k, inside] = np.interp(ref[inside], r["x"][ok], r["v"][ok])
             regridded += 1
 
-    # --- обрезка хвоста, где нет ни одного значения (например, -300 за концом волокна)
+    # обрезка пустого хвоста (-300 за концом волокна)
     col_valid = np.isfinite(vals).any(axis=0)
     last = int(np.max(np.nonzero(col_valid)[0])) + 1 if col_valid.any() else 0
     cropped = n - last
@@ -331,10 +319,8 @@ def _assemble_source(sid, fname, dts, ch, sub, issues_df, point_stats, n_raw, ha
                       tz_offset, x_unit, report, issues_all)
 
 
-# --------------------------------------------------------------------------- cache
-
 def load_source_cached(path: Path, cfg: dict, cache_dir: Path) -> list[SourceData]:
-    """Загружает файл, переиспользуя кэш processed/*.npz при неизменном файле и настройках."""
+    """Загрузка с кэшем processed/*.npz."""
     path = Path(path)
     cache_dir.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha1((file_fingerprint(path) + json.dumps(cfg["data"], sort_keys=True))
@@ -372,7 +358,7 @@ def _load_npz(cache_dir: Path, m: dict) -> SourceData:
 
 
 def load_all(cfg: dict, data_dir: Path, cache_dir: Path) -> tuple[list[SourceData], list[dict]]:
-    """Загружает все файлы; ошибки по отдельным файлам не останавливают остальные."""
+    """Загружает все файлы; ошибка одного не останавливает остальные."""
     sources, failures = [], []
     for fname in cfg["data"]["files"]:
         p = Path(data_dir) / fname

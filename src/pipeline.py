@@ -1,9 +1,6 @@
-"""Сквозной пайплайн: CSV -> валидация -> нормализация -> признаки -> детекторы ->
-события -> закономерности -> оценка -> artifacts/results.
+"""Пайплайн CSV -> события -> artifacts/results.
 
-Запуск:  python -m src.pipeline            (конфигурация по умолчанию + config/user_config.json)
-         python -m src.pipeline --no-synthetic --config path/to/override.json
-Результат детерминирован при одинаковых данных и конфигурации (фиксированные random_state).
+python -m src.pipeline [--no-synthetic] [--config override.json]
 """
 from __future__ import annotations
 
@@ -78,7 +75,7 @@ def run_source(src: SourceData, cfg: dict) -> dict:
 
 def run_pipeline(cfg: dict | None = None, data_dir: Path = DATA_DIR, artifacts_dir: Path = ARTIFACTS_DIR,
                  synthetic: bool | None = None, progress=None) -> dict:
-    """Полный запуск; возвращает манифест. progress(fraction, message) - для интерфейса."""
+    """Полный запуск; возвращает манифест. progress(fraction, message) — для интерфейса."""
     cfg = cfg or load_config()
     t_start = time.time()
     started = datetime.now(timezone.utc).isoformat()

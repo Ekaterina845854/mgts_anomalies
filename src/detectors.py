@@ -1,20 +1,8 @@
-"""Детекторы аномалий на сетке окон «кадр × бин».
+"""Детекторы аномалий на сетке «кадр × бин».
 
-Все детекторы возвращают DetectorResult одного формата:
-  * scores    - (T, B) float32, чем больше, тем необычнее; NaN = окно не оценивалось
-                (нет локальной нормы / недостаточно истории);
-  * threshold - порог в собственной шкале метода;
-  * config    - параметры метода, score_transform - как получена шкала.
-
-Правило порога задаётся параметром threshold_mode каждого метода:
-  * "fixed"    - порог в собственной интерпретируемой шкале (A и C: число σ шума);
-  * "quantile" - threshold = max(quantile(scores[validation], 1 - target_rate), min_threshold).
-По EDA квантиль не подходит для A и C: в validation 1.csv идут крупные реальные
-изменения, и квантиль 99.8 % даёт порог ~31σ, пропуская всё умеренное. У Isolation
-Forest нет шкалы в σ, поэтому для него используется квантиль. Для всех методов
-сохраняется доля срабатываний на validation (контроль ложных тревог), сравнение - на test.
-Сырые оценки разных методов в разных шкалах; для визуального сравнения
-используется score_norm = score / threshold (>= 1 означает срабатывание).
+scores (T, B): больше — необычнее, NaN — не оценивалось; threshold в шкале метода.
+threshold_mode: fixed — порог в σ (A, C, D); quantile — квантиль validation (IF без шкалы в σ).
+score_norm = score / threshold, >= 1 — срабатывание.
 """
 from __future__ import annotations
 
@@ -58,8 +46,8 @@ class DetectorResult:
 
 def calibrate_threshold(scores: np.ndarray, val_mask: np.ndarray, target_rate: float,
                         min_threshold: float, mode: str = "quantile") -> tuple[float, dict]:
-    """Порог по validation-оценкам (quantile) или фиксированный (fixed) + диагностика."""
-    v = scores[val_mask].ravel()  # val_mask - маска кадров (T,)
+    """Порог (quantile или fixed) и доля срабатываний на validation."""
+    v = scores[val_mask].ravel()  # val_mask: (T,)
     v = v[np.isfinite(v)]
     source = "validation"
     if v.size < 100:
@@ -75,7 +63,7 @@ def calibrate_threshold(scores: np.ndarray, val_mask: np.ndarray, target_rate: f
 
 
 class _Measure:
-    """Время и пик памяти (tracemalloc отслеживает аллокации NumPy)."""
+    """Время и пик памяти."""
 
     def __enter__(self):
         tracemalloc.start()
@@ -89,14 +77,8 @@ class _Measure:
         self.peak_mb = peak / 2**20
 
 
-# --------------------------------------------------------------------------- A
-
 def detect_statistical(prep: Prepared, feats: dict, cfg: dict) -> DetectorResult:
-    """A. Робастное отклонение от локальной нормы: score = |dev| / (1.4826·MAD).
-
-    Норма - медиана бина по прошлым кадрам окна (см. preprocess), шум - MAD на
-    train с нижней границей, поэтому деления на ноль и бесконечных оценок нет.
-    """
+    """A. Робастное отклонение от локальной нормы: |dev| / (1.4826·MAD на train)."""
     dcfg = cfg["detectors"]
     with _Measure() as m:
         scores = np.abs(prep.z).astype(np.float32)
@@ -111,15 +93,8 @@ def detect_statistical(prep: Prepared, feats: dict, cfg: dict) -> DetectorResult
         fit_time_s=0.0, score_time_s=m.elapsed, peak_mem_mb=m.peak_mb)
 
 
-# --------------------------------------------------------------------------- B
-
 def detect_isolation_forest(prep: Prepared, feats: dict, cfg: dict) -> DetectorResult:
-    """B. Isolation Forest на признаках окон (features.FEATURE_NAMES).
-
-    Обучение - на случайной подвыборке train-окон источника, оценка - всех окон.
-    sklearn.score_samples возвращает "чем меньше, тем аномальнее" в диапазоне
-    [-1, 0]; используем score = -score_samples ∈ [0, 1] (≈0.5 - типичное окно).
-    """
+    """B. Isolation Forest на признаках окон; score = -score_samples ∈ [0, 1]."""
     dcfg = cfg["detectors"]
     p = dcfg["isolation_forest"]
     rng = np.random.default_rng(p["random_state"])

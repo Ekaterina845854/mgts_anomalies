@@ -20,8 +20,6 @@ from .common import (DET_COLORS, DET_ORDER, DET_SHORT, MUTED, TYPE_COLORS, TYPE_
 PAGE_SIZE = 25
 
 
-# =========================================================================== helpers
-
 def _offset(si: dict):
     return si["tz_offset_h"] if si.get("tz_known") else None
 
@@ -117,8 +115,6 @@ def _on_table_select(table_key: str, ids: list, target: str):
     return cb
 
 
-# =========================================================================== screen 1
-
 def page_detection():
     header("Обнаружение событий", "Сигнал вдоль волокна во времени и найденные аномалии по выбранному источнику")
     if not require_results():
@@ -203,8 +199,6 @@ def page_detection():
         else:
             st.caption("Нет событий.")
 
-
-# =========================================================================== screen 2
 
 def page_catalog():
     header("Каталог событий", "Обнаруженные события всех алгоритмов: фильтры, карточка события, повторы и синхронность")
@@ -374,8 +368,6 @@ def event_card(ev_all: pd.DataFrame, e: pd.Series):
                          hide_index=True, width="stretch", height=210)
 
 
-# =========================================================================== classification
-
 def page_classification():
     header("Классификация", "Описательные категории событий, кластеры и закономерности — без физических причин")
     if not require_results():
@@ -500,8 +492,6 @@ def page_classification():
         else:
             st.dataframe(cs, hide_index=True, width="stretch")
 
-
-# =========================================================================== comparison
 
 def _scope_meta(m: dict, scope_split: str):
     runs = pd.DataFrame(m["detector_runs"])
@@ -681,8 +671,6 @@ def page_comparison():
                        tab.reset_index().to_csv(index=False).encode("utf-8-sig"), "comparison.csv", "text/csv")
 
 
-# =========================================================================== spatial
-
 def page_spatial():
     header("Пространственный обзор", "Профиль сигнала и плотность событий вдоль волокна (без географической привязки)")
     if not require_results():
@@ -736,8 +724,6 @@ def page_spatial():
     st.markdown("**Изменчивость во времени по координате**")
     st.plotly_chart(fig3, width="stretch")
 
-
-# =========================================================================== about
 
 def page_about():
     header("О проекте", "Методы, источники, ограничения, параметры и статус расчёта")

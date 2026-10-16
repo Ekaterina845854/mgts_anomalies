@@ -1,8 +1,4 @@
-"""Воспроизводимый EDA: профиль данных и графики по всем источникам.
-
-Запуск:  python -m src.eda      -> docs/eda/summary.csv, docs/eda/*.png
-Тот же код вызывается из notebooks/eda.ipynb.
-"""
+"""Воспроизводимый EDA: python -m src.eda -> docs/eda/ (используется в notebooks/eda.ipynb)."""
 from __future__ import annotations
 
 import warnings

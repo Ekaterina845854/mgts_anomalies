@@ -1,18 +1,7 @@
-"""Нормализация: SourceData (кадры × точки) -> Prepared (кадры × пространственные бины).
+"""SourceData (кадры × точки) -> Prepared (кадры × бины).
 
-Решения, принятые по результатам EDA:
-  * Пространственный бин ~1 единица x (≈1 м для файлов с шагом 0.1/0.25):
-    соседние точки сильно коррелированы, а объём уменьшается в 4–10 раз.
-  * Разрыв по времени > max(gap_factor × медианный шаг, gap_min_s) начинает новый
-    сегмент (3.csv: разрыв 21 ч; 6.csv: 3.3 ч; 2.csv: 20 мин). Скользящая норма и лаги через разрыв
-    не переносятся - первые кадры сегмента считаются "недостаточно истории".
-  * Локальная норма - медиана бина по ПРОШЛЫМ кадрам окна baseline_window_min
-    (текущий кадр в норму не входит, будущее не используется).
-  * Общий сдвиг кадра (common mode) - медиана отклонений по всем бинам кадра.
-    В 1.csv весь профиль периодически смещается целиком; без этой поправки
-    каждый такой кадр выглядел бы как "событие длиной во всё волокно".
-  * Шум бина - 1.4826·MAD отклонения на train-части с нижней границей
-    (защита от нулевого MAD и почти постоянных сигналов).
+Бин ~1 единица x; разрыв по времени начинает сегмент; норма — медиана прошлых кадров;
+общий сдвиг кадра вычитается; шум — 1.4826·MAD на train с нижней границей.
 """
 from __future__ import annotations
 
@@ -73,10 +62,7 @@ def choose_bin_points(src: SourceData, cfg: dict) -> int:
 
 def make_segments(t_sec: np.ndarray, gap_factor: float, gap_min_s: float = 0.0
                   ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Разрыв = шаг > max(gap_factor × медианный шаг, gap_min_s).
-
-    gap_min_s нужен для источников со сменой режима опроса (1.csv: 4 мин, затем 30 с).
-    """
+    """Разрыв = шаг > max(gap_factor × медианный шаг, gap_min_s)."""
     dt = np.diff(t_sec)
     med = float(np.median(dt)) if len(dt) else float("nan")
     new_seg = np.r_[True, dt > max(gap_factor * med, gap_min_s)]
@@ -87,7 +73,7 @@ def make_segments(t_sec: np.ndarray, gap_factor: float, gap_min_s: float = 0.0
 
 
 def make_split(n: int, fractions: dict) -> np.ndarray:
-    """Хронологическое разбиение: первые train-доля кадров, затем validation, затем test."""
+    """Хронологическое разбиение train/validation/test."""
     tr = fractions["train"]
     va = fractions["validation"]
     i1, i2 = int(round(n * tr)), int(round(n * (tr + va)))
@@ -111,7 +97,7 @@ def bin_values(values: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, np.n
 
 
 class _quiet:
-    """Подавление RuntimeWarning 'Mean of empty slice' для полностью пустых бинов."""
+    """Подавление 'Mean of empty slice' для пустых бинов."""
 
     def __enter__(self):
         import warnings
@@ -125,11 +111,7 @@ class _quiet:
 
 def trailing_median(vb: np.ndarray, t_sec: np.ndarray, segment: np.ndarray,
                     window_s: float, min_frames: int, max_frames: int = 60) -> np.ndarray:
-    """Медиана по прошлым кадрам того же сегмента в окне [t - window_s, t).
-
-    Если в окне больше max_frames кадров, берётся равномерная подвыборка
-    (для 5.csv с шагом 10 с окно 60 мин = 360 кадров).
-    """
+    """Медиана по прошлым кадрам сегмента в окне [t - window_s, t), не более max_frames кадров."""
     T, B = vb.shape
     out = np.full((T, B), np.nan, dtype=np.float32)
     seg_start = np.zeros(T, dtype=int)
@@ -184,7 +166,7 @@ def prepare(src: SourceData, cfg: dict) -> Prepared:
     ref = dev[train] if np.isfinite(dev[train]).sum() > 0 else dev
     sigma = robust_sigma(ref, p["noise_floor_frac"], p["noise_floor_abs"])
     z = (dev / sigma[None, :]).astype(np.float32)
-    # Разброс точек внутри бина относительно его типичного значения на train
+    # разброс внутри бина относительно типичного на train
     with _quiet():
         intra_ref = np.nanmedian(intra[train] if train.any() else intra, axis=0)
     intra_ref = np.where(np.isfinite(intra_ref) & (intra_ref > 0), intra_ref,

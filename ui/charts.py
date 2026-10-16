@@ -1,4 +1,4 @@
-"""Plotly-графики. Все данные - из сохранённых результатов пайплайна."""
+"""Plotly-графики по сохранённым результатам."""
 from __future__ import annotations
 
 import numpy as np
@@ -55,7 +55,7 @@ def heatmap(prep: dict, tmask: np.ndarray, offset, mode: str, x_unit: str,
 
 def add_event_boxes(fig, ev: pd.DataFrame, offset, selected: str | None = None, max_boxes: int = 40,
                     max_labels: int = 15):
-    """Рамки (у сильнейших) + кликабельные маркеры всех событий в точке пика (customdata = event_id)."""
+    """Рамки у сильнейших и маркеры всех событий в точке пика (customdata = event_id)."""
     ev = ev.sort_values("anomaly_score_norm", ascending=False)
     top = set(ev["event_id"].head(max_labels)) | {selected}
     for r in ev.head(max_boxes).itertuples():
@@ -106,7 +106,7 @@ def fragment_chart(prep: dict, ev: pd.Series, offset, height=210):
 
 def profile_chart(prep: dict, t_idx: int, offset, x_unit: str, ev: pd.Series | None = None,
                   height=300):
-    """Профиль вдоль волокна в момент t_idx и медианный профиль источника для сравнения."""
+    """Профиль в момент t_idx и медианный профиль источника."""
     xc = (prep["bin_x_start"] + prep["bin_x_end"]) / 2
     with np.errstate(all="ignore"):
         import warnings
@@ -180,7 +180,7 @@ def space_time_overlay(ev: pd.DataFrame, offset, x_unit: str, height=380):
 
 def grouped_bars(df: pd.DataFrame, cat: str, series: str, value: str, colors: dict, order_cat=None,
                  order_series=None, labels: dict | None = None, height=300, text=True):
-    """Сгруппированные столбцы; цвет закреплён за сущностью (series)."""
+    """Сгруппированные столбцы, цвет закреплён за серией."""
     fig = go.Figure()
     for s in order_series or df[series].unique():
         d = df[df[series] == s]
